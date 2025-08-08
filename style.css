@@ -29,7 +29,7 @@ main {
 }
 
 .data-section {
-    width: 800px;
+    width: 1100px;
     min-width: 30px;
     background-color: #f8f9fa;
     padding: 20px;
@@ -51,10 +51,10 @@ main {
 
 .kotak {
 
-  flex: 1 1 200px; 
+  flex: 1 1 60px; 
   /*height: 100px;*/
   /* Mengatur tinggi kotak agar responsif */
- min-height: 200px; /* Tinggi minimum agar kotak tetap terlihat */
+ min-height: 60px; /* Tinggi minimum agar kotak tetap terlihat */
 
   /* Styling tambahan untuk visualisasi */
   background-color: #f8f9fa;
