@@ -25,6 +25,9 @@ let getBounds = [];
 // Variabel untuk visualisasi lintasan & kapal
 let missionPath = null;
 let latestPosition = null; 
+let latestData = null; 
+let latestCog = null; 
+// Variabel untuk interval pembaruan peta
 let MAP_UPDATE_INTERVAL = 2500; // Interval pembaruan peta dalam milidetik
 let lastMapUpdate = 0; // Waktu terakhir peta diperbarui
 let currentPositionMarker = null; // Marker untuk posisi kapal
@@ -32,6 +35,9 @@ const trackCoordinates = []; // Array untuk menyimpan koordinat lintasan
 // Perubahan lintang dan bujur untuk 12.5 meter
 const deltaLat = 0.0001125; 
 const deltaLon = 0.000113;
+const lintasan1Button = document.getElementById('lintasan1');
+const lintasan2Button = document.getElementById('lintasan2');
+const refreshButton = document.getElementById('tombol_refresh');
 
 const shipIcon = L.icon({
     // URL gambar ikon kapal
@@ -45,6 +51,20 @@ const shipIcon = L.icon({
     
     // Titik di mana popup akan muncul di atas ikon
     popupAnchor: [0, -19]
+});
+
+const redBuoyIcon = L.icon({
+    iconUrl: 'merah.png',
+    iconSize: [15, 15],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12]
+});
+
+const greenBuoyIcon = L.icon({
+    iconUrl: 'hijau.png',
+    iconSize: [15, 15],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12]
 });
 
 // Fungsi untuk menentukan arah (N/S, E/W)
@@ -146,7 +166,7 @@ function updateMapVisuals() {
     if (currentPositionMarker) {
         currentPositionMarker.setLatLng(latestPosition); // Menggunakan argumen 'position'
     } else {
-        currentPositionMarker = L.marker(latestPosition, { icon: shipIcon }).addTo(map);
+        currentPositionMarker = L.marker(latestPosition, { icon: shipIcon,}).addTo(map);
     }
 
     trackCoordinates.push(latestPosition);
@@ -177,8 +197,6 @@ function updateMissionImagesUI(images) {
         kameraBelakangContainer.innerHTML = '<p>Belum ada foto.</p>';
         return;
     }
-
-
     
     // Proses setiap gambar yang diambil dari database
     images.forEach(imgData => {
@@ -188,8 +206,12 @@ function updateMissionImagesUI(images) {
 
         if (imgData.image_slot_name === 'kamera_atas') {
             kameraDepanContainer.appendChild(imgElement);
+       
+
+
         } else if (imgData.image_slot_name === 'kamera_bawah') {
             kameraBelakangContainer.appendChild(imgElement);
+      
         }
     });
 }
@@ -242,6 +264,42 @@ function clearMap() {
     console.log("Peta telah di-refresh dan dibersihkan.");
 }
 
+// Fungsi untuk mengirim sinyal refresh ke Supabase
+async function triggerRefresh() {
+    try {
+        const { error } = await supabaseClient
+            .from('map_state')
+            .update({ is_refreshed: true})
+            .eq('id', 1);
+
+        if (error) throw error;
+        console.log('Sinyal refresh terkirim.');
+    } catch (error) {
+        console.error('Gagal mengirim sinyal refresh:', error);
+    }
+}
+
+// --- Fungsi fetchBuoyData() yang diperbarui ---
+async function fetchBuoyData() {
+    try {
+        const { data: buoys, error } = await supabaseClient
+            .from('buoys')
+            .select('*');
+
+        if (error) throw error;
+
+        buoys.forEach(buoy => {
+            const icon = buoy.color === 'red' ? redBuoyIcon : greenBuoyIcon;
+            L.marker([buoy.latitude, buoy.longitude], { icon: icon })
+                .addTo(map)
+                .bindPopup(`Pelampung ${buoy.color}`);
+        });
+
+    } catch (error) {
+        console.error('Gagal mengambil data pelampung:', error);
+    }
+}
+
 // --- Fungsi untuk mengambil data awal (initial fetch) ---
 async function fetchInitialData() {
     const errorMessageElement = document.getElementById('error-message');
@@ -263,8 +321,9 @@ async function fetchInitialData() {
             latestPosition = [navData[0].latitude, navData[0].longitude];
             latestData = navData[0];
             updateNavUI(latestData);
+            updateMapVisuals(); // Perbarui visualisasi peta dengan data navigasi terbaru
 
-            updateMapVisuals(); } 
+             } 
         else {
             // Tangani kasus di mana tidak ada data navigasi
             updateNavUI(null);
@@ -280,6 +339,9 @@ async function fetchInitialData() {
 
         if (cogData.length > 0) {
             updateCogUI(cogData[0]);
+            // Perbarui visualisasi peta dengan data navigasi terbaru
+            
+            // currentPositionMarker = L.marker([navData[0].latitude, navData[0].longitude], { icon: shipIcon, rotationAngle: cogData[0].cog }).addTo(map);
         } else {
             // Tangani kasus di mana tidak ada data COG     
             updateCogUI(null);
@@ -287,7 +349,7 @@ async function fetchInitialData() {
         
         // Ambil semua data gambar
         const { data: images, error: imagesError } = await supabaseClient
-            .from('gambar_atas')
+            .from('image_mission') // Perbaikan: Gunakan 'image_mission' yang konsisten
             .select('*');
         
         if (imagesError) throw imagesError;
@@ -313,7 +375,9 @@ supabaseClient
     updateNavUI(payload.new);
     latestData = payload.new;
     latestPosition = [payload.new.latitude, payload.new.longitude];
+    // Perbarui posisi kapal di peta
     updateMapVisuals();
+    
   })
   .subscribe();
 
@@ -322,20 +386,24 @@ supabaseClient
     .channel('cog_data_changes')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cog_data' }, payload => { // Perbaikan: Gunakan 'cog_data'
         console.log('Realtime COG Data Update:', payload.new);
-        updateCogUI(payload.new);
+    updateCogUI(payload.new);
+    if (currentPositionMarker) {
+        currentPositionMarker.setRotationAngle(payload.new.cog);
+    }
+    
     })
     .subscribe();  
 
 // Menggunakan Realtime untuk gambar misi
 supabaseClient
   .channel('mission_images_changes')
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'gambar_atas' }, async payload => {
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'image_mission' }, async payload => {
     console.log('Realtime Mission Images Update:', payload);
     
     // Perbaikan: Panggil ulang fungsi yang mengambil semua gambar terbaru
     // untuk memastikan tampilan selalu sinkron.
     const { data: images, error } = await supabaseClient
-      .from('gambar_atas')
+      .from('image_mission') 
       .select('*');
 
     if (error) {
@@ -351,7 +419,9 @@ supabaseClient
   .channel('map_state_changes')
   .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'map_state' }, payload => {
     const newViewType = payload.new.view_type;
+    const isRefreshed = payload.new.is_refreshed;
     console.log(`Perubahan status peta diterima: ${newViewType}`);
+    console.log(`Is peta telah di-refresh? ${isRefreshed}`);
 
     if (newViewType === 'lintasan1') {
         x=-7.769356;
@@ -373,6 +443,27 @@ supabaseClient
         map.setMaxBounds(getBounds);            
         map.fitBounds(getBounds);
         }
+    
+    if (newViewType === 'lintasan1' && lintasan1Button) {
+        lintasan1Button.classList.add('aktif');
+        lintasan2Button.classList.remove('aktif');
+    } else if (newViewType === 'lintasan2' && lintasan2Button) {
+        lintasan2Button.classList.add('aktif');
+        lintasan1Button.classList.remove('aktif');
+    }
+
+    if (isRefreshed) {
+        clearMap();
+        
+        // **Penting**: Kirim sinyal update kembali untuk mereset is_refreshed menjadi false
+        supabaseClient
+            .from('map_state')
+            .update({ is_refreshed: false })
+            .eq('id', 1)
+            .then(({ error }) => {
+                if (error) console.error('Gagal mereset is_refreshed:', error);
+            });
+    }
         
   })
   .subscribe();
@@ -383,30 +474,27 @@ supabaseClient
 document.addEventListener('DOMContentLoaded', () => {
 
     fetchInitialData() 
-    
-    // Hubungkan tombol refresh dengan fungsi clearMap()
-    const refreshButton = document.getElementById('tombol_refresh');
-    if (refreshButton) {
-        refreshButton.addEventListener('click', clearMap);
-    }
-    
-    const lintasan1Button = document.getElementById('lintasan1');
-    const lintasan2Button = document.getElementById('lintasan2');
 
+    fetchBuoyData();
+    
     if (lintasan1Button) {
         lintasan1Button.addEventListener('click', () => {
             updateMapViewInSupabase('lintasan1');
+
             // Hapus class 'aktif' dan tambahkan pada tombol yang baru diklik
-            lintasan2Button.classList.remove('aktif');
-            lintasan1Button.classList.add('aktif');
         });
     }
 
     if (lintasan2Button) {
         lintasan2Button.addEventListener('click', () => {
             updateMapViewInSupabase('lintasan2');
-            lintasan1Button.classList.remove('aktif');
-            lintasan2Button.classList.add('aktif');
+        });
+    }
+
+    // Hubungkan tombol refresh dengan fungsi clearMap()
+    if (refreshButton) {
+        refreshButton.addEventListener('click', () => {
+            triggerRefresh();
         });
     }
 });
