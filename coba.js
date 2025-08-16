@@ -6,53 +6,13 @@ const tombolLintasan = document.querySelectorAll('.tombol-lintasan');
 // Inisialisasi klien supabaseClient
 const supabaseClient = supabase.createClient(supabaseClient_URL, supabaseClient_ANON_KEY);
 
-let hasStarted = false;
-let hasReachedBuoys = false;
-
-// --- Konstanta dan Perhitungan ---
-const totalSideLengthMeters = 25;
-const gridIntervalMeters = 5;
-const numDivisions = totalSideLengthMeters / gridIntervalMeters;
-
-// Fungsi untuk mengkonversi meter ke perubahan lintang dan bujur
-function metersToLatLon(centerLat, meters) {
-    const metersPerDegLat = 111320; // rata-rata
-    const metersPerDegLon = 111320 * Math.cos(centerLat * Math.PI / 180);
-
-    return {
-        dLat: meters / metersPerDegLat,
-        dLon: meters / metersPerDegLon
-    };
-}
-
-// lintasan1 
-let curretlintasan = 'lintasan1'; 
-
-
-// Variabel global untuk grid
-let gridLayers1 = L.layerGroup();
-let gridLayers2 = L.layerGroup();
-
-
-
-const centerLat = -7.769356;
-const centerLon = 110.383056;
-const map = L.map('map', {
-    center: [centerLat, centerLon],
-    zoom: 1, 
-    scrollWheelZoom: false,
-    dragging: false,
-    doubleClickZoom: false,
-    boxZoom: false,
-    touchZoom: false,
-    zoomControl: false
-});
+let map = L.map('map').setView([-7.769356, 110.383056], 22);
 
 // Tambahkan peta dasar dari OpenStreetMap
 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
-    maxZoom: 21,
-    minZoom: 21,
-    // attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    maxZoom: 25,
+    minZoom: 20,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
 }).addTo(map);
 
 
@@ -107,43 +67,6 @@ const greenBuoyIcon = L.icon({
     popupAnchor: [0, -12]
 });
 
-const startIcon = L.icon({
-    iconUrl: 'start.jpg',
-    iconSize: [25, 25],
-    iconAnchor: [12, 24],
-    popupAnchor: [0, -20]
-});
-
-const finishIcon = L.icon({
-    iconUrl: 'finish.png',
-    iconSize: [25, 25],
-    iconAnchor: [12, 24],
-    popupAnchor: [0, -20]
-    // membuat icon agak tebus pandang
-});
-
-// 
-
-let waypointLayers = L.layerGroup(); // LayerGroup untuk menampung semua marker waypoint
-
-// --- FUNGSI BARU: Menggambar Waypoint ---
-function drawWaypoints(missionType) {
-
-    const waypoints = missionWaypoints[missionType];
-
-    // Gambar marker start
-    L.marker(waypoints.start, { icon: startIcon, opacity: 0.4 })
-        .addTo(waypointLayers)
-        .bindPopup('Titik Start');
-
-    // Gambar marker finish
-    L.marker(waypoints.finish, { icon: finishIcon, opacity: 0.4 })
-        .addTo(waypointLayers)
-        .bindPopup('Titik Finish');
-
-    waypointLayers.addTo(map); // Tambahkan layer ke peta
-}
-
 // Fungsi untuk menentukan arah (N/S, E/W)
 function getCardinalDirection(value, type) {
     if (type === 'lat') {
@@ -154,64 +77,6 @@ function getCardinalDirection(value, type) {
     return '';
 }
 
-// Fungsi menentukan minimal jarak terhadap misi
-function isNear(currentPosition, targetPosition, toleranceMeters) {
-    // Fungsi ini menghitung jarak antara dua koordinat
-    const from = L.latLng(currentPosition[0], currentPosition[1]);
-    const to = L.latLng(targetPosition[0], targetPosition[1]);
-    return from.distanceTo(to) <= toleranceMeters;
-}
-
-// Menentukan misi lintasan 1 atau lintasan 2
-const missionWaypoints = {
-    'lintasan1': {
-        'start': [-7.769356, 110.383056],
-        'buoys': [-7.769300, 110.383150],
-        'finish': [-7.769250, 110.383080]
-        // ... tambahkan titik misi lain di sini
-    },
-    'lintasan2': {
-        'start': [-7.769000, 110.383500],
-        'buoys': [-7.768950, 110.383400],
-        'finish': [-7.768850, 110.383450]
-        // ... tambahkan titik misi lain di sini
-    }
-};
-
-// Fungsi Mengubah Status Misi
-function updateMissionStatus(element, status) {
-    if (!element) return;
-    const parentKotak = element;
-    parentKotak.classList.remove('kotak-belum', 'kotak-proses', 'kotak-selesai');
-    if (status === 'belum') {
-        parentKotak.classList.add('kotak-belum');
-    } else if (status === 'proses') {
-        parentKotak.classList.add('kotak-proses');
-    } else if (status === 'selesai') {
-        parentKotak.classList.add('kotak-selesai');
-    }
-}
-
-// Fungsi untuk memperbarui status misi dari database
-async function updateMissionStatusInSupabase(missionId, status) {
-    // Logika untuk mengubah missionId menjadi nama kolom yang sesuai
-    const columnName = `status_${missionId.replace('mission-', '').replace('-kotak', '')}`;
-    
-    try {
-        const updateData = {};
-        updateData[columnName] = status; // Mengirim status sebagai string
-
-        const { error } = await supabaseClient
-            .from('data_mission')
-            .update(updateData)
-            .eq('id', 1);
-        
-        if (error) throw error;
-        console.log(`Status misi '${columnName}' berhasil diperbarui menjadi ${status}.`);
-    } catch (error) {
-        console.error('Gagal memperbarui status misi:', error);
-    }
-}
 
 // Fungsi untuk format A: Degree, Decimal (DD,DDDD)
 function formatA(lat, lon) {
@@ -239,6 +104,26 @@ function formatB(lat, lon) {
     return `${latDirection} ${latDegrees}° ${latMinutes.toFixed(4)}' ${lonDirection} ${lonDegrees}° ${lonMinutes.toFixed(4)}'`;
 }
 
+function clearMap() {
+    // Menghapus garis lintasan dari peta
+    if (missionPath) {
+        map.removeLayer(missionPath);
+        missionPath = null;
+    }
+
+    // Menghapus ikon kapal dari peta
+    if (currentPositionMarker) {
+        map.removeLayer(currentPositionMarker);
+        currentPositionMarker = null;
+    }
+
+    
+    // Opsional: Mengatur ulang posisi terakhir menjadi null
+    latestPosition = null;
+    latestData = null;
+
+    console.log("Peta telah di-refresh dan dibersihkan.");
+}
 
 // --- Fungsi untuk memperbarui UI ---
 // Fungsi untuk memperbarui UI data navigasi
@@ -296,64 +181,6 @@ function updateMapVisuals() {
         missionPath = L.polyline(trackCoordinates, { color: 'blue', weight: 3 }).addTo(map);
     }
 }
-
-// Menggambar grid pada peta
-function drawGrid(missionType) {
-    let layersToDraw, centerPoint, latLabels, lonLabels;
-
-    // Tentukan parameter berdasarkan jenis misi
-    if (missionType === 'lintasan1') {
-        layersToDraw = gridLayers1;
-        centerPoint = [-7.769356, 110.383056];
-        latLabels = ['1', '2', '3', '4', '5'];
-        lonLabels = ['A', 'B', 'C', 'D', 'E'];
-        const { dLat, dLon } = metersToLatLon(centerPoint[0], 5);
-        deltaLat_5m = dLat;
-        deltaLon_5m = dLon;
-    } else { // Lintasan 2
-        layersToDraw = gridLayers2;
-        centerPoint = [-7.769000, 110.383500];
-        latLabels = ['A', 'B', 'C', 'D', 'E'];
-        lonLabels = ['1', '2', '3', '4', '5'];
-        const { dLat, dLon } = metersToLatLon(centerPoint[0], 5);
-        deltaLat_5m = dLat;     
-        deltaLon_5m = dLon;
-    }
-    
-    const totalDeltaLat = deltaLat_5m * numDivisions;
-    const totalDeltaLon = deltaLon_5m * numDivisions;
-
-    const newBounds = L.latLngBounds(
-        [centerPoint[0] - totalDeltaLat / 2, centerPoint[1] - totalDeltaLon / 2],
-        [centerPoint[0] + totalDeltaLat / 2, centerPoint[1] + totalDeltaLon / 2]
-    );
-
-      
-
-    // Gambar garis dan label
-    for (let i = 0; i <= numDivisions; i++) {
-        const lat = newBounds.getSouth() + (i * (totalDeltaLat / numDivisions));
-        L.polyline([[lat, newBounds.getWest()], [lat, newBounds.getEast()]], { color: '#888', weight: 1 }).addTo(layersToDraw);
-        
-        const lon = newBounds.getWest() + (i * (totalDeltaLon / numDivisions));
-        L.polyline([[newBounds.getSouth(), lon], [newBounds.getNorth(), lon]], { color: '#888', weight: 1 }).addTo(layersToDraw);
-    }
-    
-    // Tambahkan label
-    for (let i = 0; i < numDivisions; i++) {
-        const lat = newBounds.getSouth() + ((i+1 ) * (totalDeltaLat / numDivisions));
-        const lon = newBounds.getWest() + ((i+1) * (totalDeltaLon / numDivisions));
-
-        L.marker([lat, newBounds.getWest()], {
-            icon: L.divIcon({ className: 'grid-label', html: latLabels[i], iconAnchor: [10, 10] })
-        }).addTo(layersToDraw);
-
-        L.marker([newBounds.getSouth(), lon], {
-            icon: L.divIcon({ className: 'grid-label', html: lonLabels[i], iconAnchor: [10, -2] })
-        }).addTo(layersToDraw);
-    }
-}
-
 
 
 
@@ -453,40 +280,6 @@ async function triggerRefresh() {
     }
 }
 
-async function resetMissionStatusInSupabase() {
-    try {
-        const resetData = {
-            mission_persiapan: 'belum',
-            mission_start: 'belum',
-            mission_buoys: 'belum',
-            image_atas: 'belum',
-            image_bawah: 'belum',
-            mission_finish: 'belum'
-        };
-        const { error } = await supabaseClient
-            .from('data_mission')
-            .update(resetData)
-            .eq('id', 1);
-
-        if (error) throw error;
-        console.log('Semua status misi berhasil direset di database.');
-    } catch (error) {
-        console.error('Gagal mereset status misi:', error);
-    }
-}
-
-function updateMissionStatusFromDB(data) {
-    if (!data) return;
-
-    // Perbarui setiap status misi berdasarkan nama kolom yang benar
-    updateMissionStatus(document.getElementById('mission-persiapan'), data.mission_persiapan);
-    updateMissionStatus(document.getElementById('mission-start'), data.mission_start);
-    updateMissionStatus(document.getElementById('mission-buoys'), data.mission_buoys);
-    updateMissionStatus(document.getElementById('mission-imagesurface'), data.image_atas);
-    updateMissionStatus(document.getElementById('mission-imageunderwater'), data.image_bawah);
-    updateMissionStatus(document.getElementById('mission-finish'), data.mission_finish);
-}
-
 // --- Fungsi fetchBuoyData() yang diperbarui ---
 async function fetchBuoyData() {
     try {
@@ -546,7 +339,6 @@ async function fetchInitialData() {
         if (cogError) throw cogError;
 
         if (cogData.length > 0) {
-            
             updateCogUI(cogData[0]);
             // Perbarui visualisasi peta dengan data navigasi terbaru
             
@@ -586,28 +378,6 @@ supabaseClient
     latestPosition = [payload.new.latitude, payload.new.longitude];
     // Perbarui posisi kapal di peta
     updateMapVisuals();
-    const tolerance = 5; // Toleransi dalam meter
-    const waypoints = missionWaypoints[curretlintasan]; // Ambil titik awal dari lintasan yang aktif
-
-    if (isNear(latestPosition, waypoints.start, tolerance)) {
-        updateMissionStatusInSupabase('mission-persiapan', 'selesai');
-        updateMissionStatusInSupabase('mission-start', 'proses');
-    }
-    if (isNear(latestPosition, waypoints.start, tolerance)) {
-        updateMissionStatusInSupabase('mission-start', 'selesai');
-        updateMissionStatusInSupabase('mission-buoys', 'proses');
-    }
-    if (isNear(latestPosition, waypoints.buoys, tolerance)) {
-        updateMissionStatusInSupabase('mission-buoys', 'selesai');
-        updateMissionStatusInSupabase('mission-imagesurface', 'proses');
-        updateMissionStatusInSupabase('mission-imageunderwater', 'proses');
-
-    }
-
-    if (isNear(latestPosition, waypoints.finish, tolerance)) {
-        updateMissionStatusInSupabase('mission-finish', 'selesai');
-    }
-
     
   })
   .subscribe();
@@ -642,7 +412,6 @@ supabaseClient
         return;
     }
     updateMissionImagesUI(images);
-    update
   })
   .subscribe();
 
@@ -664,7 +433,6 @@ supabaseClient
     [x+deltaLat,y+deltaLon]];  // Sudut Kanan Atas (max lat, max lon)
         map.setMaxBounds(getBounds);
         map.fitBounds(getBounds);
-        curretlintasan = 'lintasan1'; // Update lintasan saat tombol diklik
 
     } else if (newViewType === 'lintasan2') {
         x=-7.769000;
@@ -675,7 +443,6 @@ supabaseClient
     [x+deltaLat,y+deltaLon]];  // Sudut Kanan Atas (max lat, max lon)
         map.setMaxBounds(getBounds);            
         map.fitBounds(getBounds);
-        curretlintasan = 'lintasan2'; // Update lintasan saat tombol diklik
         }
     
     if (newViewType === 'lintasan1' && lintasan1Button) {
@@ -688,7 +455,7 @@ supabaseClient
 
     if (isRefreshed) {
         clearMap();
-        resetMissionStatusInSupabase(); // Reset status misi di database
+        
         // **Penting**: Kirim sinyal update kembali untuk mereset is_refreshed menjadi false
         supabaseClient
             .from('map_state')
@@ -702,38 +469,18 @@ supabaseClient
   })
   .subscribe();
 
-// Realtime untuk pembaruan status misi  
-supabaseClient
-    .channel('mission_log_changes')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'data_mission' }, payload => {
-        // Panggil fungsi untuk memperbarui status misi di UI
-        updateMissionStatusFromDB(payload.new);
-    
-    })
-    .subscribe();
-
 
 
 // Tambahkan event listener saat dokumen selesai dimuat
 document.addEventListener('DOMContentLoaded', () => {
 
-    drawWaypoints('lintasan1');
-    drawWaypoints('lintasan2');
-
-
-    fetchInitialData();
-    // Gambar grid untuk lintasan 1 dan 2
-    drawGrid('lintasan1');
-    drawGrid('lintasan2'); 
-    gridLayers1.addTo(map);
-    gridLayers2.addTo(map);
+    fetchInitialData() 
 
     fetchBuoyData();
     
     if (lintasan1Button) {
         lintasan1Button.addEventListener('click', () => {
             updateMapViewInSupabase('lintasan1');
-            map.fitBounds(gridLayers1.getBounds());
 
             // Hapus class 'aktif' dan tambahkan pada tombol yang baru diklik
         });
@@ -742,8 +489,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (lintasan2Button) {
         lintasan2Button.addEventListener('click', () => {
             updateMapViewInSupabase('lintasan2');
-            map.fitBounds(gridLayers2.getBounds());
-
         });
     }
 

@@ -174,8 +174,8 @@ h3 {
 
 /* --- Pesan Error --- */
 
-#map {  height: 500px;
-        width: 500px;
+#map {  height: 400px;
+        width: 400px;
         border-radius: 6px;
         margin-top: 20px;
 }
@@ -217,4 +217,67 @@ h3 {
     padding: 10px 20px;
     background-color: #007bff; /* Warna biru untuk tombol refresh */
     color: white;
+}
+
+/* kotak untuk menadandakan proses */
+.kotak-proses {
+    background-color: #edd080; /* Warna abu-abu terang */
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+    margin-top: 10px;
+}
+
+/* kotak untuk menandakan sudah selesai */
+.kotak-selesai {
+    background-color: #a9f4ba; /* Warna hijau terang */
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+    margin-top: 10px;
+}   
+
+/*kotak untuk mendandakan belum diproses */
+.kotak-belum {
+    background-color: #f19ea5; /* Warna merah terang */
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+    margin-top: 10px;
+}
+
+
+.missionsection {
+    background-color: rgb(255, 255, 255);
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.data-mission {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}   
+
+.grid-line {
+  position: absolute;
+  background-color: rgba(0,0,0,0.2);
+}
+
+.label {
+  position: absolute;
+  font-size: 14px;
+  font-weight: bold;
+  color: #333;
+}
+
+.vertical {
+  width: 1px;
+  height: 100%;
+}
+
+.horizontal {
+  height: 1px;
+  width: 100%;
 }
